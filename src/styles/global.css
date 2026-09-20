@@ -174,7 +174,7 @@ a {
   transition: opacity 0.6s ease;
 }
 /* Keep long-form reading calm. */
-html:has([data-article]) .bg-net { opacity: 0.5; }
+html:has([data-article]) .bg-net { opacity: 0.65; }
 
 /* ── Overlays ───────────────────────────────────────────────────── */
 .noise {
@@ -785,7 +785,7 @@ html:has([data-article]) .read-progress { opacity: 1; }
 .back-link:hover { color: var(--accent); transform: translateX(-3px); }
 
 .dossier {
-  background: var(--panel);
+  background: rgba(13, 17, 16, 0.8); /* lets the network show faintly behind the post */
   padding: clamp(1.25rem, 4vw, 2.25rem);
   animation: dossier-thud 0.22s ease-out 0.95s both;
 }

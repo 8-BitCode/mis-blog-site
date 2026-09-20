@@ -504,8 +504,8 @@ function initLost() {
 // The whole field parallaxes against scroll and reaches toward the cursor.
 // It lives on a persisted <canvas>, so it starts once and survives page swaps.
 function initBackground() {
-  const canvas = document.querySelector('.bg-net')
-  const ctx = canvas?.getContext('2d')
+  let canvas = document.querySelector('.bg-net')
+  let ctx = canvas?.getContext('2d')
   if (!ctx) return
 
   const still = reduced() // reduced motion: paint one calm frame, no loop
@@ -693,6 +693,10 @@ function initBackground() {
   window.addEventListener(
     'resize',
     () => {
+      // Phones fire "resize" whenever the address bar slides in or out.
+      // Re-allocating the canvas then wipes it mid-scroll, so ignore small
+      // height changes and only rebuild for real size changes.
+      if (window.innerWidth === w && Math.abs(window.innerHeight - h) < 120) return
       size()
       if (still) draw(0)
     },
@@ -711,6 +715,37 @@ function initBackground() {
     pointer.x = pointer.y = -9999
   })
 
+  // (Re)start the loop. Safe to call any time.
+  const wake = () => {
+    if (still) return draw(0)
+    cancelAnimationFrame(raf)
+    last = performance.now()
+    raf = requestAnimationFrame(frame)
+  }
+
+  // If a page swap ever replaces the canvas instead of carrying it over,
+  // pick up the new one so the background can't go blank.
+  const rebind = () => {
+    const el = document.querySelector('.bg-net')
+    if (!el || el === canvas) return
+    const c = el.getContext('2d')
+    if (!c) return
+    canvas = el
+    ctx = c
+    size()
+    wake()
+  }
+  document.addEventListener('astro:after-swap', rebind)
+  document.addEventListener('astro:page-load', () => {
+    rebind()
+    if (!still && !document.hidden) wake()
+  })
+  // Back/forward cache restores freeze rAF loops.
+  window.addEventListener('pageshow', () => {
+    size()
+    wake()
+  })
+
   if (still) {
     draw(0)
     return
@@ -719,12 +754,15 @@ function initBackground() {
     if (document.hidden) {
       cancelAnimationFrame(raf)
       raf = 0
-    } else if (!raf) {
-      last = performance.now()
-      raf = requestAnimationFrame(frame)
+    } else {
+      wake()
     }
   })
-  raf = requestAnimationFrame(frame)
+  // Watchdog: if the browser stalled the loop (throttling, GPU hiccup), restart it.
+  setInterval(() => {
+    if (!document.hidden && performance.now() - last > 1500) wake()
+  }, 2000)
+  wake()
 }
 
 // ── Page lifecycle ─────────────────────────────────────────────────
