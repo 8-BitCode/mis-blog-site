@@ -1,0 +1,61 @@
+---
+import Base from '../layouts/Base.astro'
+import {getPosts} from '../lib/sanity.js'
+import {SITE} from '../lib/site.js'
+
+// Cloudflare Pages serves this as the 404 for any unknown address on the blog.
+const posts = await getPosts()
+const latest = posts.slice(0, 3)
+const archive = JSON.stringify(posts.map((p) => ({title: p.title, slug: p.slug, fileNo: p.fileNo})))
+---
+<Base title={`File not found // ${SITE.name}`} description="That address doesn't lead to a dispatch." noindex>
+  <section class="lost">
+    <div class="titlebar">
+      <span class="titlebar-path">~/dispatches/<span data-path-short>unknown</span></span>
+      <span class="titlebar-rule" aria-hidden="true"></span>
+      <span class="titlebar-flag titlebar-flag--bad">ERROR 404</span>
+    </div>
+
+    <div class="lost-grid">
+      <div class="radar" role="img" aria-label="Radar sweep with no signal found">
+        <span class="radar-sweep"></span>
+        <span class="radar-blip"></span>
+        <span class="radar-label">NO SIGNAL</span>
+      </div>
+
+      <div class="lost-copy">
+        <p class="lost-code" aria-hidden="true"><span data-decrypt="mount" data-delay="100">404</span></p>
+        <h1 class="lost-title">File not found</h1>
+        <p class="lost-text">
+          That address doesn't lead to a dispatch. It may have been renamed or removed, or the link has a typo.
+        </p>
+
+        <div class="term" data-terminal aria-hidden="true">
+          <p class="term-line" style="--i:0"><span class="term-key">REQUEST</span><span class="term-val" data-path>/unknown</span></p>
+          <p class="term-line" style="--i:1"><span class="term-key">ARCHIVE</span><span class="term-val">search complete</span></p>
+          <p class="term-line" style="--i:2"><span class="term-key">RESULT</span><span class="term-val term-val--bad">NO EXACT MATCH</span></p>
+        </div>
+
+        <div class="suggest" data-suggest>
+          {latest.length > 0 && (
+            <>
+              <p class="suggest-title" data-suggest-title>LATEST FILES</p>
+              <ul class="suggest-list" data-suggest-list>
+                {latest.map((p) => (
+                  <li><a href={`/${p.slug}`}><b>FILE {p.fileNo}</b><span>{p.title}</span></a></li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+
+        <div class="lost-actions">
+          <a class="btn btn-solid" href="/">All files</a>
+          <a class="btn" href={SITE.mainUrl}>Main site</a>
+        </div>
+      </div>
+    </div>
+
+    <script type="application/json" id="archive-data" set:html={archive} />
+  </section>
+</Base>

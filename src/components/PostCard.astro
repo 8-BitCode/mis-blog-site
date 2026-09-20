@@ -1,0 +1,59 @@
+---
+import SignalCover from './SignalCover.astro'
+import {imgSet} from '../lib/sanity.js'
+import {fmtDate, readMinutes} from '../lib/format.js'
+
+const {post, lead = false} = Astro.props
+const cover = post.coverImage?.asset
+  ? imgSet(post.coverImage, lead ? [640, 960, 1400] : [420, 640, 900], {ratio: 16 / 9})
+  : null
+const search = `${post.title} ${post.author ?? ''} ${post.excerpt ?? ''}`.toLowerCase()
+---
+<article
+  class:list={['post-card', 'ascii-box', {'is-lead': lead}]}
+  data-card
+  data-search={search}
+  data-decrypt-host
+>
+  <span class="ascii-corner tl" aria-hidden="true">+</span>
+  <span class="ascii-corner tr" aria-hidden="true">+</span>
+  <span class="ascii-corner bl" aria-hidden="true">+</span>
+  <span class="ascii-corner br" aria-hidden="true">+</span>
+
+  <a class="post-card-link" href={`/${post.slug}`} aria-label={`Open file ${post.fileNo}: ${post.title}`}>
+    <div class="post-media" transition:name={`cover-${post.slug}`}>
+      {cover ? (
+        <img
+          src={cover.src}
+          srcset={cover.srcset}
+          sizes={lead ? '(min-width: 52rem) 55vw, 100vw' : '(min-width: 52rem) 38vw, 100vw'}
+          alt=""
+          width="640"
+          height="360"
+          loading={lead ? 'eager' : 'lazy'}
+          decoding="async"
+          style={post.lqip ? `background-image:url(${post.lqip});background-size:cover` : undefined}
+        />
+      ) : (
+        <SignalCover seed={post.slug} />
+      )}
+      <span class="post-media-scan" aria-hidden="true"></span>
+      <span class="post-media-tag">FILE {post.fileNo}</span>
+    </div>
+
+    <div class="post-body">
+      <div class="post-meta">
+        <span>{fmtDate(post.publishedAt)}</span>
+        <span>{readMinutes(post.chars)} MIN READ</span>
+        {post.author && <span>{post.author.toUpperCase()}</span>}
+      </div>
+      <h2 class="post-title" transition:name={`title-${post.slug}`}>
+        <span data-decrypt="hover">{post.title}</span>
+      </h2>
+      {post.excerpt && (
+        <p class="post-excerpt"><span class="redact" data-redact>{post.excerpt}</span></p>
+      )}
+      <span class="post-open" aria-hidden="true">OPEN FILE &gt;</span>
+    </div>
+  </a>
+</article>

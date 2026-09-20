@@ -1,0 +1,14 @@
+---
+import {SITE} from '../lib/site.js'
+const year = new Date().getFullYear()
+---
+<footer class="site-footer">
+  <div class="footer-inner">
+    <p class="footer-end"><span class="prompt">&gt;</span>END OF TRANSMISSION<span class="cursor" aria-hidden="true"></span></p>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="/">All files</a>
+      <a href={SITE.mainUrl}>Main site</a>
+    </nav>
+    <p class="footer-fine">© {year} Manchester Intelligence Society</p>
+  </div>
+</footer>

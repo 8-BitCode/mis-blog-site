@@ -1,0 +1,22 @@
+---
+/** Scrolling wire of the latest files. Two identical halves so the loop is seamless. */
+const {posts = []} = Astro.props
+// Repeat the run enough that each half is wider than a wide screen even with 1–2 posts.
+const repeat = Math.max(1, Math.ceil(6 / Math.max(posts.length, 1)))
+const run = Array.from({length: repeat}, () => posts).flat()
+---
+<div class="ticker" role="region" aria-label="Latest files">
+  <div class="ticker-track">
+    {[0, 1].map((half) => (
+      <div class="ticker-half" aria-hidden={half === 1 ? 'true' : undefined}>
+        {run.map((p) => (
+          <a class="ticker-item" href={`/${p.slug}`} tabindex={half === 1 ? -1 : undefined}>
+            <b>FILE {p.fileNo}</b>
+            <span>{p.title}</span>
+            <i aria-hidden="true">//</i>
+          </a>
+        ))}
+      </div>
+    ))}
+  </div>
+</div>

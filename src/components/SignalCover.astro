@@ -1,0 +1,83 @@
+---
+/**
+ * Procedural "signal" cover. Posts without a cover image get a unique
+ * waveform generated from their slug — same slug, same picture, every build.
+ * One bar per file is picked out in red as the anomaly.
+ */
+const {seed = 'mis', bars = 46} = Astro.props
+
+function hashString(str) {
+  let h = 1779033703 ^ str.length
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
+    h = (h << 13) | (h >>> 19)
+  }
+  h = Math.imul(h ^ (h >>> 16), 2246822507)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  return (h ^= h >>> 16) >>> 0
+}
+function mulberry32(a) {
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const seedNum = hashString(String(seed))
+const rand = mulberry32(seedNum)
+const W = 320
+const H = 180
+const mid = H / 2
+const p1 = rand() * 6.28
+const p2 = rand() * 6.28
+const f1 = 0.18 + rand() * 0.28
+const f2 = 0.5 + rand() * 0.7
+const anomaly = 6 + Math.floor(rand() * (bars - 12))
+const step = W / bars
+
+const columns = Array.from({length: bars}, (_, i) => {
+  const wave = 0.5 + 0.5 * Math.sin(i * f1 + p1)
+  const ripple = 0.55 + 0.45 * Math.sin(i * f2 + p2)
+  let h = 0.1 + 0.55 * wave * ripple + rand() * 0.2
+  if (i === anomaly) h = 0.95
+  h = Math.min(0.95, h)
+  const half = h * (mid - 14)
+  return {
+    x: +(i * step + step * 0.2).toFixed(2),
+    y: +(mid - half).toFixed(2),
+    w: +(step * 0.6).toFixed(2),
+    h: +(half * 2).toFixed(2),
+    o: +(0.35 + rand() * 0.65).toFixed(2),
+    hot: i === anomaly,
+  }
+})
+const code = seedNum.toString(16).toUpperCase().padStart(8, '0').slice(0, 6)
+---
+<svg
+  class="signal-cover"
+  viewBox={`0 0 ${W} ${H}`}
+  preserveAspectRatio="xMidYMid slice"
+  role="img"
+  aria-label="Generated signal pattern"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <rect width={W} height={H} class="sc-bg" />
+  {[0.25, 0.5, 0.75].map((f) => (
+    <line x1="0" x2={W} y1={H * f} y2={H * f} class="sc-grid" />
+  ))}
+  <line x1="0" x2={W} y1={mid} y2={mid} class="sc-axis" />
+  {columns.map((c, i) => (
+    <rect
+      x={c.x}
+      y={c.y}
+      width={c.w}
+      height={c.h}
+      class:list={['sc-bar', {'is-hot': c.hot}]}
+      style={`--i:${i};opacity:${c.hot ? 1 : c.o}`}
+    />
+  ))}
+  <text x="10" y="17" class="sc-text">SIG {code}</text>
+</svg>

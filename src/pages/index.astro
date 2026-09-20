@@ -1,17 +1,75 @@
 ---
 import Base from '../layouts/Base.astro'
+import PostCard from '../components/PostCard.astro'
+import Ticker from '../components/Ticker.astro'
 import {getPosts} from '../lib/sanity.js'
+import {fmtDate} from '../lib/format.js'
+import {SITE} from '../lib/site.js'
+
 const posts = await getPosts()
-const fmt = (d) => new Date(d).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'}).toUpperCase()
+const [lead, ...rest] = posts
+const showSearch = posts.length >= 6
 ---
 <Base>
-  <h1>CASE FILES</h1>
-  {posts.length === 0 && <p>No files declassified yet.</p>}
-  {posts.map((p, i) => (
-    <a class="file" href={`/${p.slug}`}>
-      <div class="meta">FILE {String(posts.length - i).padStart(3, '0')} · {fmt(p.publishedAt)}{p.author && ` · ${p.author.toUpperCase()}`}</div>
-      <h2>{p.title}</h2>
-      {p.excerpt && <p>{p.excerpt}</p>}
-    </a>
-  ))}
+  {posts.length > 0 && <Ticker posts={posts.slice(0, 8)} />}
+
+  <section class="masthead">
+    <div class="titlebar">
+      <span class="titlebar-path">~/dispatches/index.sys</span>
+      <span class="titlebar-rule" aria-hidden="true"></span>
+      <span class="titlebar-flag">CLEARANCE: PUBLIC</span>
+    </div>
+
+    <h1 class="mast-title">
+      <span class="prompt" aria-hidden="true">&gt;</span><span data-decrypt="mount" data-delay="150">{SITE.name}</span><span class="cursor" aria-hidden="true"></span>
+    </h1>
+
+    <p class="mast-sub"><span class="redact" data-redact>{SITE.tagline}</span></p>
+
+    {posts.length > 0 && (
+      <dl class="mast-meta">
+        <div><dt>FILES</dt><dd>{String(posts.length).padStart(3, '0')}</dd></div>
+        <div><dt>LAST FILED</dt><dd>{fmtDate(posts[0].publishedAt)}</dd></div>
+      </dl>
+    )}
+  </section>
+
+  {posts.length === 0 ? (
+    <section class="feed">
+      <div class="feed-empty-state ascii-box">
+        <p class="feed-empty-title">Nothing filed yet.</p>
+        <p class="feed-empty-text">The first dispatch will appear here once it's published. In the meantime, the main site has everything else.</p>
+        <a class="btn btn-solid" href={SITE.mainUrl}>Visit the main site</a>
+      </div>
+    </section>
+  ) : (
+    <>
+      <section class="feed" aria-labelledby="latest-h">
+        <h2 class="feed-title" id="latest-h"><span class="prompt" aria-hidden="true">&gt;</span><span data-decrypt="visible">LATEST FILE</span></h2>
+        <PostCard post={lead} lead />
+      </section>
+
+      {rest.length > 0 && (
+        <section class="feed" aria-labelledby="archive-h">
+          <div class="feed-head">
+            <h2 class="feed-title" id="archive-h"><span class="prompt" aria-hidden="true">&gt;</span><span data-decrypt="visible">ARCHIVE</span></h2>
+            {showSearch && (
+              <div class="search">
+                <label class="search-box">
+                  <span class="search-prompt" aria-hidden="true">&gt;</span>
+                  <span class="sr-only">Search files</span>
+                  <input type="search" data-search placeholder="search files" autocomplete="off" spellcheck="false" />
+                </label>
+                <span class="search-count" data-search-count aria-live="polite">{posts.length} FILES</span>
+              </div>
+            )}
+          </div>
+          <div class="grid">
+            {rest.map((p) => <PostCard post={p} />)}
+          </div>
+          <p class="feed-empty" data-search-empty hidden>No file matches that search. Clear the box to see every file.</p>
+        </section>
+      )}
+    </>
+  )}
 </Base>

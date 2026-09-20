@@ -1,0 +1,31 @@
+---
+import {SITE} from '../lib/site.js'
+const path = Astro.url.pathname
+const onHome = path === '/'
+---
+<header class="site-header">
+  <div class="header-bar">
+    <a class="brand" href="/" aria-label={`${SITE.short} ${SITE.name} — home`}>
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-code">{SITE.short}</span>
+      <span class="brand-sub">{SITE.sub}</span>
+    </a>
+
+    <nav class="header-links" aria-label="Primary">
+      <a class:list={['hlink', {'is-active': onHome}]} href="/" aria-current={onHome ? 'page' : undefined}>ALL FILES</a>
+      <a class="hlink" href={SITE.mainUrl}>MAIN SITE</a>
+    </nav>
+
+    <div class="header-status" aria-hidden="true">
+      <span class="status-dot"></span>
+      <span>FEED LIVE</span>
+      <span class="clock" data-clock>--:--:--</span>
+      <span class="read-pct" data-read-pct>0%</span>
+    </div>
+
+    <button type="button" class="sfx-toggle" data-sfx-toggle aria-pressed="true" title="Toggle interface sounds">
+      SFX: ON
+    </button>
+  </div>
+  <div class="read-progress" aria-hidden="true"><i></i></div>
+</header>

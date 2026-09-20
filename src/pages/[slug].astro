@@ -1,29 +1,157 @@
 ---
 import Base from '../layouts/Base.astro'
+import SignalCover from '../components/SignalCover.astro'
 import {toHTML} from '@portabletext/to-html'
-import {getPosts, getPost, urlFor} from '../lib/sanity.js'
+import {getPostsFull, imgSet, urlFor} from '../lib/sanity.js'
+import {fmtDate, readMinutes, esc, slugify} from '../lib/format.js'
+import {SITE} from '../lib/site.js'
 
 export async function getStaticPaths() {
-  const posts = await getPosts()
-  return posts.map((p) => ({params: {slug: p.slug}}))
+  const posts = await getPostsFull() // one request for every post + body
+  return posts.map((post, i) => ({
+    params: {slug: post.slug},
+    props: {
+      post,
+      newer: i > 0 ? posts[i - 1] : null,
+      older: i < posts.length - 1 ? posts[i + 1] : null,
+    },
+  }))
 }
 
-const {slug} = Astro.params
-const post = await getPost(slug)
+const {post, newer, older} = Astro.props
+
+// ── Portable Text → HTML, collecting headings for the contents list ──
+const headings = []
+const used = new Set()
+const plain = (value) => (value?.children ?? []).map((c) => c.text ?? '').join('')
+const headingId = (text) => {
+  const base = slugify(text) || 'section'
+  let id = base
+  let n = 2
+  while (used.has(id)) id = `${base}-${n++}`
+  used.add(id)
+  return id
+}
+const heading = (level) => ({value, children}) => {
+  const text = plain(value)
+  const id = headingId(text)
+  headings.push({id, text, level})
+  return `<h${level} id="${id}">${children}</h${level}>`
+}
+
+let figNo = 0
 const html = toHTML(post.body ?? [], {
   components: {
+    block: {h2: heading(2), h3: heading(3)},
+    marks: {
+      link: ({children, value}) => {
+        const href = value?.href ?? '#'
+        const external = /^https?:\/\//i.test(href)
+        return `<a href="${esc(href)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ''}>${children}</a>`
+      },
+    },
     types: {
-      image: ({value}) =>
-        `<figure><img src="${urlFor(value).width(1200).url()}" alt="${value.alt ?? ''}" loading="lazy" /></figure>`,
+      image: ({value}) => {
+        if (!value?.asset) return ''
+        const {src, srcset} = imgSet(value, [640, 1000, 1400])
+        const alt = value.alt ?? ''
+        figNo += 1
+        return `<figure><img src="${src}" srcset="${srcset}" sizes="(min-width: 44rem) 40rem, 100vw" alt="${esc(alt)}" loading="lazy" decoding="async" />${
+          alt ? `<figcaption>FIG. ${figNo} — ${esc(alt)}</figcaption>` : ''
+        }</figure>`
+      },
     },
   },
 })
-const date = new Date(post.publishedAt).toLocaleDateString('en-GB', {day: '2-digit', month: 'long', year: 'numeric'})
+
+const showToc = headings.length >= 3
+const cover = post.coverImage?.asset ? imgSet(post.coverImage, [640, 1000, 1400, 1800], {ratio: 21 / 9}) : null
+const ogImage = post.coverImage?.asset
+  ? urlFor(post.coverImage).width(1200).height(630).fit('crop').auto('format').url()
+  : undefined
+const description = post.excerpt || SITE.tagline
 ---
-<Base title={`${post.title} // MIS`}>
-  <a href="/">&larr; ALL FILES</a>
-  <h1>{post.title}</h1>
-  <div style="color: var(--fg-dim); font-size: .7rem;">{date}{post.author && ` · ${post.author}`}</div>
-  {post.coverImage && <img src={urlFor(post.coverImage).width(1200).url()} alt={post.coverImage.alt ?? ''} style="max-width:100%; margin: 1.5rem 0; border: 1px solid var(--line);" />}
-  <div class="prose" set:html={html} />
+<Base title={`${post.title} // ${SITE.name}`} description={description} image={ogImage} type="article" article>
+  <div class="article-page">
+    <a class="back-link" href="/">&lt; ALL FILES</a>
+
+    <header class="dossier ascii-box">
+      <span class="ascii-corner tl" aria-hidden="true">+</span>
+      <span class="ascii-corner tr" aria-hidden="true">+</span>
+      <span class="ascii-corner bl" aria-hidden="true">+</span>
+      <span class="ascii-corner br" aria-hidden="true">+</span>
+
+      <div class="dossier-top">
+        <span class="dossier-file">~/dispatches/file-{post.fileNo}</span>
+        <span class="stamp" aria-label="Declassified">DECLASSIFIED</span>
+      </div>
+
+      <h1 class="dossier-title" transition:name={`title-${post.slug}`}>{post.title}</h1>
+
+      <dl class="dossier-meta">
+        <div><dt>FILE</dt><dd><span data-decrypt="mount" data-delay="500">{post.fileNo}</span></dd></div>
+        <div><dt>FILED</dt><dd><span data-decrypt="mount" data-delay="650">{fmtDate(post.publishedAt)}</span></dd></div>
+        {post.author && <div><dt>FILED BY</dt><dd><span data-decrypt="mount" data-delay="800">{post.author.toUpperCase()}</span></dd></div>}
+        <div><dt>READ TIME</dt><dd><span data-decrypt="mount" data-delay="950">{readMinutes(post.chars)} MIN</span></dd></div>
+      </dl>
+    </header>
+
+    <div class="article-cover ascii-box" transition:name={`cover-${post.slug}`}>
+      {cover ? (
+        <img
+          src={cover.src}
+          srcset={cover.srcset}
+          sizes="(min-width: 80rem) 76rem, 100vw"
+          alt={post.coverImage.alt ?? ''}
+          width="1400"
+          height="600"
+          decoding="async"
+          style={post.lqip ? `background-image:url(${post.lqip});background-size:cover` : undefined}
+        />
+      ) : (
+        <SignalCover seed={post.slug} bars={72} />
+      )}
+    </div>
+
+    <div class:list={['article-grid', {'has-toc': showToc}]}>
+      {showToc && (
+        <nav class="toc" aria-label="Contents">
+          <p class="toc-title">CONTENTS</p>
+          <ol>
+            {headings.map((h) => (
+              <li><a href={`#${h.id}`} data-toc-link class:list={{'is-sub': h.level === 3}}>{h.text}</a></li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      <div class="article-main">
+        <div class="prose" set:html={html} />
+
+        <div class="article-end">
+          <p class="article-end-line"><span class="prompt" aria-hidden="true">&gt;</span>END OF FILE {post.fileNo}</p>
+          <button type="button" class="btn" data-copy>
+            <span data-copy-label>COPY LINK</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {(newer || older) && (
+      <nav class="adjacent" aria-label="More files">
+        {older ? (
+          <a class="adjacent-link ascii-box" href={`/${older.slug}`}>
+            <span class="adjacent-dir">&lt; OLDER FILE {older.fileNo}</span>
+            <span class="adjacent-title">{older.title}</span>
+          </a>
+        ) : <span />}
+        {newer ? (
+          <a class="adjacent-link adjacent-link--next ascii-box" href={`/${newer.slug}`}>
+            <span class="adjacent-dir">NEWER FILE {newer.fileNo} &gt;</span>
+            <span class="adjacent-title">{newer.title}</span>
+          </a>
+        ) : <span />}
+      </nav>
+    )}
+  </div>
 </Base>
