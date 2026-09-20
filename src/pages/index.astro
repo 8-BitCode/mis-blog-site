@@ -1,17 +1,17 @@
 ---
-
+import Base from '../layouts/Base.astro'
+import {getPosts} from '../lib/sanity.js'
+const posts = await getPosts()
+const fmt = (d) => new Date(d).toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'}).toUpperCase()
 ---
-
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Base>
+  <h1>CASE FILES</h1>
+  {posts.length === 0 && <p>No files declassified yet.</p>}
+  {posts.map((p, i) => (
+    <a class="file" href={`/${p.slug}`}>
+      <div class="meta">FILE {String(posts.length - i).padStart(3, '0')} · {fmt(p.publishedAt)}{p.author && ` · ${p.author.toUpperCase()}`}</div>
+      <h2>{p.title}</h2>
+      {p.excerpt && <p>{p.excerpt}</p>}
+    </a>
+  ))}
+</Base>

@@ -1,0 +1,47 @@
+---
+const {title = "MIS // Case Files"} = Astro.props
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="nav-bar">
+        <a class="brand" href="/"><span class="dot"></span><b>MIS</b><small>//CASE FILES</small></a>
+        <a class="back" href="https://manchesterintelligencesociety.com">&larr; MAIN SITE</a>
+      </div>
+    </header>
+    <main><slot /></main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #07090a; --panel: #0d1110; --line: #24302c; --line-soft: #182420;
+    --fg: #cdd8d2; --fg-dim: #5e6d67; --accent: #3ddc84; --flag: #ff5a4e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: "IBM Plex Mono", monospace; line-height: 1.7; }
+  a { color: var(--accent); }
+  .nav { position: sticky; top: 0; background: rgba(7,9,10,.9); border-bottom: 1px solid var(--line-soft); backdrop-filter: blur(6px); }
+  .nav-bar { max-width: 52rem; margin: 0 auto; padding: .7rem 1.25rem; display: flex; justify-content: space-between; align-items: baseline; }
+  .brand { text-decoration: none; color: var(--fg); display: flex; gap: .4rem; align-items: baseline; }
+  .brand small, .back { color: var(--fg-dim); font-size: .65rem; letter-spacing: .08em; text-decoration: none; }
+  .back:hover { color: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--flag); box-shadow: 0 0 6px var(--flag); }
+  main { max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 5rem; }
+  .file { display: block; text-decoration: none; color: var(--fg); background: var(--panel); border: 1px solid var(--line); padding: 1.1rem 1.25rem; margin-bottom: 1rem; transition: border-color .15s; }
+  .file:hover { border-color: var(--accent); }
+  .file .meta { color: var(--fg-dim); font-size: .65rem; letter-spacing: .08em; }
+  .file h2 { margin: .3rem 0; font-size: 1.05rem; }
+  .file p { margin: 0; color: var(--fg-dim); font-size: .8rem; }
+  .prose img { max-width: 100%; height: auto; border: 1px solid var(--line); }
+  .prose h2, .prose h3 { color: var(--accent); }
+  .prose blockquote { border-left: 2px solid var(--flag); margin-left: 0; padding-left: 1rem; color: var(--fg-dim); }
+</style>

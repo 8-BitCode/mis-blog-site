@@ -1,0 +1,29 @@
+---
+import Base from '../layouts/Base.astro'
+import {toHTML} from '@portabletext/to-html'
+import {getPosts, getPost, urlFor} from '../lib/sanity.js'
+
+export async function getStaticPaths() {
+  const posts = await getPosts()
+  return posts.map((p) => ({params: {slug: p.slug}}))
+}
+
+const {slug} = Astro.params
+const post = await getPost(slug)
+const html = toHTML(post.body ?? [], {
+  components: {
+    types: {
+      image: ({value}) =>
+        `<figure><img src="${urlFor(value).width(1200).url()}" alt="${value.alt ?? ''}" loading="lazy" /></figure>`,
+    },
+  },
+})
+const date = new Date(post.publishedAt).toLocaleDateString('en-GB', {day: '2-digit', month: 'long', year: 'numeric'})
+---
+<Base title={`${post.title} // MIS`}>
+  <a href="/">&larr; ALL FILES</a>
+  <h1>{post.title}</h1>
+  <div style="color: var(--fg-dim); font-size: .7rem;">{date}{post.author && ` · ${post.author}`}</div>
+  {post.coverImage && <img src={urlFor(post.coverImage).width(1200).url()} alt={post.coverImage.alt ?? ''} style="max-width:100%; margin: 1.5rem 0; border: 1px solid var(--line);" />}
+  <div class="prose" set:html={html} />
+</Base>
