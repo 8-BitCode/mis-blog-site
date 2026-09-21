@@ -42,10 +42,24 @@ const canonical = new URL(Astro.url.pathname, SITE.siteUrl).href
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    {/* Render-blocking on a phone: the browser will not paint anything until
+        Google Fonts answers. display=swap already accepts a flash of the
+        fallback, so load the sheet asynchronously and get first paint sooner. */}
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"
-      rel="stylesheet"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"
+      />
+    </noscript>
+
+    {/* The loader mark, so it's ready the moment it's needed. */}
+    <link rel="preload" as="image" href="/apple-touch-icon.png" />
 
     <ClientRouter />
   </head>
@@ -58,6 +72,14 @@ const canonical = new URL(Astro.url.pathname, SITE.siteUrl).href
     <div class="noise" aria-hidden="true" transition:persist></div>
     <div class="reticle" aria-hidden="true" transition:persist>
       <span class="xhair-x"></span><span class="xhair-y"></span><span class="xhair-box"></span>
+    </div>
+
+    <div class="nav-loader" data-nav-loader hidden transition:persist>
+      <div class="nav-loader-mark" aria-hidden="true">
+        <img src="/apple-touch-icon.png" width="44" height="44" alt="" decoding="async" />
+      </div>
+      <p class="nav-loader-text" role="status">RETRIEVING FILE</p>
+      <div class="nav-loader-bar" aria-hidden="true"><i></i></div>
     </div>
 
     <Header />

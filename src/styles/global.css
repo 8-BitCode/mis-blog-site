@@ -1243,3 +1243,201 @@ html:has([data-article]) .read-progress { opacity: 1; }
     -webkit-mask-image: none !important;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE PERFORMANCE
+   Everything below exists because a phone GPU is not a laptop GPU.
+   The desktop experience above is untouched; these rules only fire on
+   small screens and touch pointers.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Opening a post ───────────────────────────────────────────────
+   The desktop transition animates a full-page mask (an @property
+   percentage driving a gradient mask) plus a brightness/saturate
+   filter over a second full-page snapshot. That is two composited
+   full-viewport layers being re-rasterised every frame for 0.6s —
+   the single biggest cause of the tap-to-post delay on mobile.
+   Small screens get a plain crossfade instead: same read, ~0 cost. */
+@media (max-width: 52rem), (pointer: coarse) {
+  ::view-transition-old(root) {
+    animation: vt-fade-out 0.16s ease both;
+    filter: none;
+  }
+  ::view-transition-new(root) {
+    animation: vt-fade-in 0.2s ease both;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  /* Cap the named title/cover morphs too, so they can't outlast the swap. */
+  ::view-transition-group(*) {
+    animation-duration: 0.22s;
+  }
+}
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+@keyframes vt-fade-in {
+  from { opacity: 0; }
+}
+
+/* ── Ambient layers ───────────────────────────────────────────────
+   .bg-glow is a permanently promoted full-viewport layer (will-change)
+   carrying three radial gradients and scaling to 1.08 — on a phone that
+   is a large texture being resampled for 45s straight, forever. Freeze
+   it: it still looks the same, it just stops costing anything. */
+@media (max-width: 52rem), (pointer: coarse) {
+  .bg-glow {
+    animation: none;
+    will-change: auto;
+    transform: translate3d(0, 0, 0) scale(1.04);
+  }
+  .bg,
+  .noise {
+    contain: strict;
+  }
+}
+
+/* ── Hover-only effects on a device with no hover ─────────────────
+   These never fire on touch, but the declared transitions and blend
+   modes still promote layers and force off-screen compositing passes
+   on every card. */
+@media (hover: none), (pointer: coarse) {
+  body { cursor: auto; }
+  .post-card { transition: none; }
+  .post-card::before { display: none; }
+  .post-media img {
+    /* Static filter: rasterised once and cached, rather than a live
+       transition target. */
+    transition: none;
+    transform: none;
+  }
+  .post-media::after,
+  .article-cover::after {
+    /* multiply forces the image into its own compositing group */
+    mix-blend-mode: normal;
+    opacity: 0.55;
+  }
+  .post-media-scan { display: none; }
+  .back-link { transition: color 0.15s ease; }
+}
+
+/* ── Homepage feed ────────────────────────────────────────────────
+   Skip layout/paint for cards that aren't near the viewport. The
+   intrinsic size keeps the scrollbar honest so nothing jumps. */
+@media (max-width: 52rem) {
+  .grid > .post-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 26rem;
+  }
+}
+
+/* The dossier shake runs on the post header right as the page is settling
+   and the cover image is decoding. Keep it for desktop only. */
+@media (max-width: 52rem), (pointer: coarse) {
+  .dossier { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   NAVIGATION LOADER
+   The bee from the favicon, held under a scanning line while the next
+   file is retrieved. fx.js only reveals this after ~140ms of waiting,
+   so a fast navigation never sees it.
+   ══════════════════════════════════════════════════════════════════ */
+.nav-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-content: center;
+  gap: 1.1rem;
+  justify-items: center;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.nav-loader[hidden] { display: none; }
+.nav-loader.is-on { opacity: 1; }
+
+.nav-loader-mark {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.nav-loader-mark::before,
+.nav-loader-mark::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.nav-loader-mark::before {
+  top: 0;
+  animation: nav-scan 1.1s var(--ease) infinite alternate;
+}
+.nav-loader-mark::after {
+  bottom: 0;
+  opacity: 0.35;
+}
+@keyframes nav-scan {
+  from { top: 0; }
+  to { top: calc(100% - 1px); }
+}
+
+.nav-loader-mark img {
+  width: 44px;
+  height: 44px;
+  image-rendering: -webkit-optimize-contrast;
+  animation: nav-bee 1.1s steps(3) infinite;
+}
+@keyframes nav-bee {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+.nav-loader-text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+  color: var(--fg-dim);
+}
+.nav-loader-text::after {
+  content: "_";
+  color: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+
+.nav-loader-bar {
+  width: 140px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--line-soft);
+}
+.nav-loader-bar i {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  animation: nav-bar 1s linear infinite;
+}
+@keyframes nav-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(350%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-loader-mark::before,
+  .nav-loader-mark img,
+  .nav-loader-bar i {
+    animation: none;
+  }
+  .nav-loader-bar i { width: 100%; }
+}

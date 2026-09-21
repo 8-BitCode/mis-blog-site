@@ -10,7 +10,12 @@ const run = Array.from({length: repeat}, () => posts).flat()
     {[0, 1].map((half) => (
       <div class="ticker-half" aria-hidden={half === 1 ? 'true' : undefined}>
         {run.map((p) => (
-          <a class="ticker-item" href={`/${p.slug}`} tabindex={half === 1 ? -1 : undefined}>
+          <a
+            class="ticker-item"
+            href={`/${p.slug}`}
+            data-astro-prefetch="tap"
+            tabindex={half === 1 ? -1 : undefined}
+          >
             <b>FILE {p.fileNo}</b>
             <span>{p.title}</span>
             <i aria-hidden="true">//</i>

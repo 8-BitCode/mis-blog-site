@@ -11,6 +11,8 @@
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const finePointer = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches
+const coarse = () => window.matchMedia('(hover: none), (pointer: coarse)').matches
+const smallScreen = () => window.matchMedia('(max-width: 52rem)').matches
 
 // ── SFX (Web Audio, zero assets) ───────────────────────────────────
 const SFX_KEY = 'mis-blog-sfx'
@@ -18,10 +20,15 @@ let audioCtx = null
 
 const sfxOn = () => {
   try {
-    return localStorage.getItem(SFX_KEY) !== 'off'
+    const saved = localStorage.getItem(SFX_KEY)
+    if (saved) return saved !== 'off'
   } catch {
-    return true
+    /* storage blocked */
   }
+  // Touch devices start silent. Creating/resuming an AudioContext costs
+  // 100ms+ on a phone and it would land in the same task as a tap that is
+  // trying to open a post — which is exactly the lag we're removing.
+  return !coarse()
 }
 
 function audio() {
@@ -121,21 +128,29 @@ function bootOnce() {
       playThud()
       return
     }
-    if (e.target.closest?.('a[href], button')) playSnap()
+    const hit = e.target.closest?.('a[href], button')
+    if (!hit) return
+    // On touch, a link tap is a navigation: skip the sound entirely rather
+    // than block the main thread while the next page is being fetched.
+    if (coarse() && hit.tagName === 'A') return
+    playSnap()
   })
 
-  // Card spotlight follows the pointer.
-  document.addEventListener(
-    'pointermove',
-    (e) => {
-      const card = e.target.closest?.('.post-card')
-      if (!card) return
-      const r = card.getBoundingClientRect()
-      card.style.setProperty('--mx', `${e.clientX - r.left}px`)
-      card.style.setProperty('--my', `${e.clientY - r.top}px`)
-    },
-    {passive: true},
-  )
+  // Card spotlight follows the pointer. Pointless on touch, and
+  // getBoundingClientRect() on every touchmove forces layout mid-scroll.
+  if (!coarse()) {
+    document.addEventListener(
+      'pointermove',
+      (e) => {
+        const card = e.target.closest?.('.post-card')
+        if (!card) return
+        const r = card.getBoundingClientRect()
+        card.style.setProperty('--mx', `${e.clientX - r.left}px`)
+        card.style.setProperty('--my', `${e.clientY - r.top}px`)
+      },
+      {passive: true},
+    )
+  }
 
   // HUD crosshair that trails the cursor and locks onto links.
   if (finePointer() && !reduced()) {
@@ -180,6 +195,7 @@ function bootOnce() {
   }
 
   initBackground()
+  initLoader()
 }
 
 // ── Decrypt text ───────────────────────────────────────────────────
@@ -229,6 +245,9 @@ function initDecrypt(cleanups) {
   const skip = reduced()
 
   els.forEach((el) => armDecrypt(el))
+  // Any scramble still running when the page swaps would keep ticking against
+  // a detached node forever.
+  cleanups.push(() => els.forEach((el) => clearInterval(el._dx)))
 
   // mount: run right away (after optional delay)
   els
@@ -322,37 +341,53 @@ function initArticle(cleanups) {
   const root = document.documentElement
   const pcts = document.querySelectorAll('[data-read-pct]')
   let raf = 0
+  let maxScroll = 0
+  let lastPct = -1
+
+  // scrollHeight is a layout read. Doing it on every scroll frame forces a
+  // reflow 60x a second, which is what makes long posts feel sticky on a
+  // phone. Measure only when the page can actually have changed height.
+  const measure = () => {
+    maxScroll = Math.max(0, root.scrollHeight - window.innerHeight)
+  }
 
   // Progress runs across the whole page: 0% at the very top, 100% at the very
   // bottom, based on how far the page can actually scroll.
   const update = () => {
     raf = 0
     const y = window.scrollY
-    const maxScroll = Math.max(0, root.scrollHeight - window.innerHeight)
     let p = maxScroll > 0 ? y / maxScroll : 1
     if (maxScroll - y <= 2) p = 1 // at the very bottom, always full
     p = Math.min(1, Math.max(0, p))
     root.style.setProperty('--read', p.toFixed(4))
-    pcts.forEach((el) => (el.textContent = `${Math.round(p * 100)}%`))
+    const pct = Math.round(p * 100)
+    if (pct !== lastPct) {
+      lastPct = pct
+      pcts.forEach((el) => (el.textContent = `${pct}%`))
+    }
   }
   const onScroll = () => {
     if (!raf) raf = requestAnimationFrame(update)
   }
-  update()
+  const remeasure = () => {
+    measure()
+    onScroll()
+  }
+  remeasure()
   window.addEventListener('scroll', onScroll, {passive: true})
-  window.addEventListener('resize', onScroll)
+  window.addEventListener('resize', remeasure)
 
   // Images, fonts and embeds change the page height after load — re-measure.
   let ro
   if ('ResizeObserver' in window) {
-    ro = new ResizeObserver(onScroll)
+    ro = new ResizeObserver(remeasure)
     ro.observe(document.body)
   }
-  document.fonts?.ready.then(onScroll)
+  document.fonts?.ready.then(remeasure)
 
   cleanups.push(() => {
     window.removeEventListener('scroll', onScroll)
-    window.removeEventListener('resize', onScroll)
+    window.removeEventListener('resize', remeasure)
     ro?.disconnect()
     cancelAnimationFrame(raf)
     root.style.removeProperty('--read')
@@ -524,11 +559,23 @@ function initBackground() {
   let nextPing = 1.2
   let last = 0
   let raf = 0
+  let paused = false
+  let frameGap = 0 // seconds between drawn frames; > 0 caps the framerate
+
+  // Reusable buckets for the link pass (see draw()), so the hot loop does no
+  // allocation.
+  const LANES = 4
+  const lanes = Array.from({length: LANES}, () => [])
 
   const wrap = (v, m) => ((v % m) + m) % m
 
   const size = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    const small = smallScreen()
+    // A phone at DPR 3 was painting ~9x the pixels of a logical viewport every
+    // frame. 1 device pixel per CSS pixel is plenty for 1px lines on a dark
+    // field, and the field is redrawn at 32fps instead of 60.
+    const dpr = Math.min(window.devicePixelRatio || 1, small ? 1 : 1.5)
+    frameGap = small ? 1 / 32 : 0
     w = window.innerWidth
     h = window.innerHeight
     canvas.width = Math.round(w * dpr)
@@ -537,7 +584,12 @@ function initBackground() {
   }
 
   const seed = () => {
-    const count = Math.round(Math.min(80, Math.max(26, (w * h) / 17000)))
+    // Node count drives an O(n²) link pass, so it is the single biggest
+    // lever on a phone: fewer nodes, quadratically less work.
+    const small = smallScreen()
+    const count = small
+      ? Math.round(Math.min(30, Math.max(14, (w * h) / 26000)))
+      : Math.round(Math.min(80, Math.max(26, (w * h) / 17000)))
     nodes = Array.from({length: count}, () => {
       const a = Math.random() * Math.PI * 2
       const speed = 3 + Math.random() * 7 // px per second
@@ -589,8 +641,12 @@ function initBackground() {
       n.glow = 0
     }
 
-    // Links between nearby nodes.
+    // Links between nearby nodes. Each link used to be its own
+    // strokeStyle + beginPath + stroke() — up to ~3000 draw calls a frame.
+    // Opacity is quantised into four bands so the whole field is four paths.
     ctx.lineWidth = 1
+    for (let l = 0; l < LANES; l++) lanes[l].length = 0
+    const LINK2 = LINK * LINK
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i]
       for (let j = i + 1; j < nodes.length; j++) {
@@ -598,14 +654,22 @@ function initBackground() {
         const dx = a.x - b.x
         const dy = a.y - b.y
         const d2 = dx * dx + dy * dy
-        if (d2 > LINK * LINK) continue
+        if (d2 > LINK2) continue
         const k = 1 - Math.sqrt(d2) / LINK
-        ctx.strokeStyle = `rgba(${DIM}, ${(k * 0.17).toFixed(3)})`
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.stroke()
+        const lane = lanes[Math.min(LANES - 1, (k * LANES) | 0)]
+        lane.push(a.x, a.y, b.x, b.y)
       }
+    }
+    for (let l = 0; l < LANES; l++) {
+      const seg = lanes[l]
+      if (!seg.length) continue
+      ctx.strokeStyle = `rgba(${DIM}, ${(((l + 0.5) / LANES) * 0.17).toFixed(3)})`
+      ctx.beginPath()
+      for (let s = 0; s < seg.length; s += 4) {
+        ctx.moveTo(seg[s], seg[s + 1])
+        ctx.lineTo(seg[s + 2], seg[s + 3])
+      }
+      ctx.stroke()
     }
 
     // The cursor reaches out to nodes near it.
@@ -681,7 +745,9 @@ function initBackground() {
 
   const frame = (now) => {
     raf = requestAnimationFrame(frame)
-    const dt = Math.min(0.05, (now - last) / 1000 || 0)
+    const elapsed = (now - last) / 1000
+    if (frameGap && elapsed < frameGap) return // capped framerate on small screens
+    const dt = Math.min(0.05, elapsed || 0)
     last = now
     scrolled += (window.scrollY - scrolled) * Math.min(1, dt * 6) // eased parallax
     draw(dt)
@@ -717,11 +783,23 @@ function initBackground() {
 
   // (Re)start the loop. Safe to call any time.
   const wake = () => {
+    paused = false
     if (still) return draw(0)
     cancelAnimationFrame(raf)
     last = performance.now()
     raf = requestAnimationFrame(frame)
   }
+
+  const sleep = () => {
+    paused = true
+    cancelAnimationFrame(raf)
+    raf = 0
+  }
+
+  // Opening a post is the busiest moment on the page: fetch, parse, view
+  // transition snapshot, image decode. Give all of that the main thread
+  // instead of spending it on ambient animation.
+  document.addEventListener('astro:before-preparation', sleep)
 
   // If a page swap ever replaces the canvas instead of carrying it over,
   // pick up the new one so the background can't go blank.
@@ -738,7 +816,8 @@ function initBackground() {
   document.addEventListener('astro:after-swap', rebind)
   document.addEventListener('astro:page-load', () => {
     rebind()
-    if (!still && !document.hidden) wake()
+    // Let the incoming page paint first, then bring the field back.
+    if (!still && !document.hidden) requestAnimationFrame(() => setTimeout(wake, 120))
   })
   // Back/forward cache restores freeze rAF loops.
   window.addEventListener('pageshow', () => {
@@ -760,9 +839,52 @@ function initBackground() {
   })
   // Watchdog: if the browser stalled the loop (throttling, GPU hiccup), restart it.
   setInterval(() => {
-    if (!document.hidden && performance.now() - last > 1500) wake()
+    if (!paused && !document.hidden && performance.now() - last > 1500) wake()
   }, 2000)
   wake()
+}
+
+// ── Navigation loader ──────────────────────────────────────────────
+// Astro's ClientRouter fetches the next page before it swaps it in. On a phone
+// that gap is real, and with nothing on screen the tap feels ignored. The bee
+// mark (the favicon) comes up as a scanning stamp, but only if the fetch is
+// actually slow — a fast navigation never flashes it.
+function initLoader() {
+  const el = document.querySelector('[data-nav-loader]')
+  if (!el) return
+  const SHOW_AFTER = 140 // ms of waiting before it's worth showing anything
+  const MIN_VISIBLE = 420 // once shown, hold it so it can't strobe
+  let timer = 0
+  let shownAt = 0
+
+  const open = (e) => {
+    // Ignore same-page hash jumps.
+    if (e?.to && e?.from && e.to.pathname === e.from.pathname) return
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      shownAt = performance.now()
+      el.hidden = false
+      requestAnimationFrame(() => el.classList.add('is-on'))
+    }, SHOW_AFTER)
+  }
+
+  const close = () => {
+    clearTimeout(timer)
+    if (el.hidden) return
+    const held = performance.now() - shownAt
+    setTimeout(() => {
+      el.classList.remove('is-on')
+      setTimeout(() => {
+        el.hidden = true
+      }, 240)
+    }, Math.max(0, MIN_VISIBLE - held))
+  }
+
+  document.addEventListener('astro:before-preparation', open)
+  document.addEventListener('astro:page-load', close)
+  window.addEventListener('pageshow', close)
+  // If the network stalls badly, don't trap the user under the overlay.
+  window.addEventListener('pagehide', close)
 }
 
 // ── Page lifecycle ─────────────────────────────────────────────────

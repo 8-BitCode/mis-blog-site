@@ -20,7 +20,12 @@ const search = `${post.title} ${post.author ?? ''} ${post.excerpt ?? ''}`.toLowe
   <span class="ascii-corner bl" aria-hidden="true">+</span>
   <span class="ascii-corner br" aria-hidden="true">+</span>
 
-  <a class="post-card-link" href={`/${post.slug}`} aria-label={`Open file ${post.fileNo}: ${post.title}`}>
+  <a
+    class="post-card-link"
+    href={`/${post.slug}`}
+    data-astro-prefetch="viewport"
+    aria-label={`Open file ${post.fileNo}: ${post.title}`}
+  >
     <div class="post-media" transition:name={`cover-${post.slug}`}>
       {cover ? (
         <img
