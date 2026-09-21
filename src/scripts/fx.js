@@ -868,16 +868,32 @@ function initLoader() {
     }, SHOW_AFTER)
   }
 
+  const HIDE_MAX_WAIT = 900 // hard cap — a slow image can't trap the user under the overlay
+
+  // The DOM swap is not the point where the page looks ready — the cover
+  // image is still a grey box until it decodes. Wait for that (briefly),
+  // so the loader hands off straight to a finished-looking page instead of
+  // closing early and leaving a pop-in that reads as more lag.
+  const waitForHero = () => {
+    const img = document.querySelector('.article-cover img, .post-card.is-lead .post-media img')
+    if (!img) return Promise.resolve()
+    if (img.complete) return Promise.resolve()
+    const ready = img.decode ? img.decode().catch(() => {}) : new Promise((res) => img.addEventListener('load', res, {once: true}))
+    return Promise.race([ready, new Promise((res) => setTimeout(res, HIDE_MAX_WAIT))])
+  }
+
   const close = () => {
     clearTimeout(timer)
     if (el.hidden) return
-    const held = performance.now() - shownAt
-    setTimeout(() => {
-      el.classList.remove('is-on')
+    waitForHero().then(() => {
+      const held = performance.now() - shownAt
       setTimeout(() => {
-        el.hidden = true
-      }, 240)
-    }, Math.max(0, MIN_VISIBLE - held))
+        el.classList.remove('is-on')
+        setTimeout(() => {
+          el.hidden = true
+        }, 240)
+      }, Math.max(0, MIN_VISIBLE - held))
+    })
   }
 
   document.addEventListener('astro:before-preparation', open)
